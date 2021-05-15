@@ -6,19 +6,11 @@ use egui::*;
 use epaint::*;
 use colstodian::*;
 
-pub type PerceptualLCh = ColorAlpha<Oklch, Separate>;
-pub type Asset = ColorAlpha<EncodedSrgb, Premultiplied>;
+use cint::ColorInterop;
 
-trait IntoEguiColor {
-    fn into_egui(self) -> Color32;
-}
-
-impl IntoEguiColor for Asset {
-    fn into_egui(self) -> Color32 {
-        let enc = self.to_u8();
-        Color32::from_rgba_premultiplied(enc[0], enc[1], enc[2], enc[3])
-    }
-}
+pub type OklchA = ColorAlpha<Oklch, Separate>;
+#[allow(non_camel_case_types)]
+pub type Srgba = ColorAlpha<EncodedSrgb, Premultiplied>;
 
 mod cache;
 use cache::Cache;
@@ -46,7 +38,7 @@ fn background_checkers(painter: &Painter, rect: Rect) {
 
     let mut mesh = Mesh::default();
     for i in 0..n {
-        let x = lerp(rect.left()..=rect.right(), i as f32 / (n as f32));
+        let x = egui::lerp(rect.left()..=rect.right(), i as f32 / (n as f32));
         mesh.add_colored_rect(
             Rect::from_min_size(pos2(x, rect.top()), checker_size),
             top_color,
@@ -122,8 +114,8 @@ fn color_slider_1d(ui: &mut Ui, value: &mut f32, range: RangeInclusive<f32>, col
         let mut mesh = Mesh::default();
         for i in 0..=N {
             let t = i as f32 / (N as f32);
-            let color = color_at(lerp(range.clone(), t));
-            let x = lerp(rect.left()..=rect.right(), t);
+            let color = color_at(egui::lerp(range.clone(), t));
+            let x = egui::lerp(rect.left()..=rect.right(), t);
             mesh.colored_vertex(pos2(x, rect.top()), color);
             mesh.colored_vertex(pos2(x, rect.bottom()), color);
             if i < N {
@@ -138,7 +130,7 @@ fn color_slider_1d(ui: &mut Ui, value: &mut f32, range: RangeInclusive<f32>, col
 
     {
         // Show where the slider is at:
-        let x = lerp(rect.left()..=rect.right(), remap_clamp(*value, range.clone(), 0.0..=1.0));
+        let x = egui::lerp(rect.left()..=rect.right(), remap_clamp(*value, range.clone(), 0.0..=1.0));
         let r = rect.height() / 4.0;
         let picked_color = color_at(*value);
         ui.painter().add(Shape::polygon(
@@ -178,9 +170,9 @@ fn color_slider_2d(
         for yi in 0..=N {
             let xt = xi as f32 / (N as f32);
             let yt = yi as f32 / (N as f32);
-            let color = color_at(lerp(x_range.clone(), xt), lerp(y_range.clone(), yt));
-            let x = lerp(rect.left()..=rect.right(), xt);
-            let y = lerp(rect.bottom()..=rect.top(), yt);
+            let color = color_at(egui::lerp(x_range.clone(), xt), egui::lerp(y_range.clone(), yt));
+            let x = egui::lerp(rect.left()..=rect.right(), xt);
+            let y = egui::lerp(rect.bottom()..=rect.top(), yt);
             mesh.colored_vertex(pos2(x, y), color);
 
             if xi < N && yi < N {
@@ -197,8 +189,8 @@ fn color_slider_2d(
     ui.painter().rect_stroke(rect, 0.0, visuals.bg_stroke); // outline
 
     // Show where the slider is at:
-    let x = lerp(rect.left()..=rect.right(), remap_clamp(*x_value, x_range.clone(), 0.0..=1.0));
-    let y = lerp(rect.bottom()..=rect.top(), remap_clamp(*y_value, y_range.clone(), 0.0..=1.0));
+    let x = egui::lerp(rect.left()..=rect.right(), remap_clamp(*x_value, x_range.clone(), 0.0..=1.0));
+    let y = egui::lerp(rect.bottom()..=rect.top(), remap_clamp(*y_value, y_range.clone(), 0.0..=1.0));
     let picked_color = color_at(*x_value, *y_value);
     ui.painter().add(Shape::Circle {
         center: pos2(x, y),
@@ -210,7 +202,7 @@ fn color_slider_2d(
     response
 }
 
-fn color_text_ui(ui: &mut Ui, color: Asset) {
+fn color_text_ui(ui: &mut Ui, color: Srgba) {
     ui.horizontal(|ui| {
         let [r, g, b, a] = color.to_u8();
         ui.label(format!(
@@ -224,7 +216,7 @@ fn color_text_ui(ui: &mut Ui, color: Asset) {
     });
 }
 
-fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asset) -> bool {
+fn color_picker_oklch_2d(ui: &mut Ui, color: &mut OklchA, col_srgba: Srgba) -> bool {
     let orig_col = *color;
 
     color_text_ui(ui, col_srgba);
@@ -243,12 +235,12 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
         color_slider_1d(ui, &mut color.alpha, 0.0..=1.0, |a| {
             let mut col = opaque;
             col.alpha = a;
-            col.convert::<EncodedSrgb, Premultiplied>().into_egui()
+            col.convert_to::<Srgba>().saturate().into_cint().into()
         });
         ui.label("Alpha");
         ui.end_row();
 
-        show_color(ui, color.convert::<EncodedSrgb, Premultiplied>().into_egui(), current_color_size);
+        show_color(ui, color.convert_to::<Srgba>().saturate().into_cint().into(), current_color_size);
         ui.label("Selected color");
         ui.end_row();
 
@@ -259,7 +251,7 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
         color_slider_1d(ui, &mut color.col.h, -PI..=PI, |h| {
             let mut col = opaque;
             col.col.h = h;
-            col.convert::<EncodedSrgb, Premultiplied>().into_egui()
+            col.convert_to::<Srgba>().saturate().into_cint().into()
         });
         ui.label("Hue");
         ui.end_row();
@@ -267,7 +259,7 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
         color_slider_1d(ui, &mut color.col.c,0.0..=0.5, |c| {
             let mut col = opaque;
             col.col.c = c;
-            col.convert::<EncodedSrgb, Premultiplied>().into_egui()
+            col.convert_to::<Srgba>().saturate().into_cint().into()
         });
         ui.label("Chroma");
         ui.end_row();
@@ -275,7 +267,7 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
         color_slider_1d(ui, &mut color.col.l, 0.0..=1.0, |l| {
             let mut col = opaque;
             col.col.l = l;
-            col.convert::<EncodedSrgb, Premultiplied>().into_egui()
+            col.convert_to::<Srgba>().saturate().into_cint().into()
         });
         ui.label("Lightness");
         ui.end_row();
@@ -285,7 +277,7 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
             let mut col = opaque;
             col.col.c = c;
             col.col.l = l;
-            col.convert::<EncodedSrgb, Premultiplied>().into_egui()
+            col.convert_to::<Srgba>().saturate().into_cint().into()
         });
         ui.label("Lightness / Chroma");
         ui.end_row();
@@ -298,10 +290,10 @@ fn color_picker_oklch_2d(ui: &mut Ui, color: &mut PerceptualLCh, col_srgba: Asse
     }
 }
 
-pub fn color_edit_button_oklch(ui: &mut Ui, color: &mut PerceptualLCh) -> Response {
-    let col_srgba = color.convert::<EncodedSrgb, Premultiplied>();
+pub fn color_edit_button_oklch(ui: &mut Ui, color: &mut OklchA) -> Response {
+    let col_srgba: Srgba = color.convert();
     let popup_id = ui.make_persistent_id("popup");
-    let mut button_response = color_button(ui, col_srgba.into_egui()).on_hover_text("Click to edit color");
+    let mut button_response = color_button(ui, col_srgba.into_cint().into()).on_hover_text("Click to edit color");
 
     if button_response.clicked() {
         ui.memory().toggle_popup(popup_id);
@@ -330,7 +322,7 @@ pub fn color_edit_button_oklch(ui: &mut Ui, color: &mut PerceptualLCh) -> Respon
     button_response
 }
 
-fn color_edit_button_inner(ui: &mut Ui, color: &mut Asset) -> Response {
+fn color_edit_button_inner(ui: &mut Ui, color: &mut Srgba) -> Response {
     // To ensure we keep hue slider when `color` is gray we store the
     // full Oklch color in a cache:
 
@@ -338,7 +330,7 @@ fn color_edit_button_inner(ui: &mut Ui, color: &mut Asset) -> Response {
         .ctx()
         .memory()
         .data_temp
-        .get_or_default::<Cache<[u8; 4], PerceptualLCh>>()
+        .get_or_default::<Cache<[u8; 4], OklchA>>()
         .get(&color.to_u8())
         .cloned()
         .unwrap_or_else(|| color.convert());
@@ -350,7 +342,7 @@ fn color_edit_button_inner(ui: &mut Ui, color: &mut Asset) -> Response {
     ui.ctx()
         .memory()
         .data_temp
-        .get_mut_or_default::<Cache<[u8; 4], PerceptualLCh>>()
+        .get_mut_or_default::<Cache<[u8; 4], OklchA>>()
         .set(color.to_u8(), oklch);
 
     response
@@ -359,11 +351,11 @@ fn color_edit_button_inner(ui: &mut Ui, color: &mut Asset) -> Response {
 /// Shows a button with the given color.
 /// If the user clicks the button, a full color picker is shown.
 pub fn color_edit_button(ui: &mut Ui, color: &mut Color32) -> Response {
-    let mut col = Asset::from_u8([color[0], color[1], color[2], color[3]]);
+    let mut col = Srgba::from(color.into_cint());
 
     let res = color_edit_button_inner(ui, &mut col);
 
-    *color = col.into_egui();
+    *color = Color32::from_cint(col.to_u8().into());
 
     res
 }

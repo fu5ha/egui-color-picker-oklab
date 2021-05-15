@@ -7,5 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egui = "0.12"
-colstodian = { path = "../colstodian" }
+egui = { git = "https://github.com/termhn/egui", rev = "b61a4a2", features = ["cint"] }
+# egui = { path = "../egui/egui", features = ["cint"] }
+colstodian = { git = "https://github.com/termhn/colstodian", rev = "d1d501a" }
+# colstodian = { path = "../colstodian" }
+cint = "^0.2.1"
